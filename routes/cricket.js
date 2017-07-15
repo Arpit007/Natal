@@ -94,7 +94,7 @@ router.post('/nextInning', function (req, res) {
 
 /**
  * Set Inning Openers
- * @param MatchID, InningsID, FacingBatsman, OtherBatsman, Bowler
+ * @param MatchID, InningsID(Not Mandatory), FacingBatsman, OtherBatsman, Bowler
  * */
 router.post('/setOpeners', function (req, res) {
     var data = getOpenersData(req.body);
@@ -123,7 +123,7 @@ router.post('/setOpeners', function (req, res) {
 
 /**
  * Score
- * @param  MatchID, InningsID, BallCode, OverID(Not Mandatory), SwitchSides, newBowler(Not Mandatory)
+ * @param  MatchID, InningsID(Not Mandatory), BallCode, OverID(Not Mandatory), SwitchSides, NewBowler(Not Mandatory)
  * */
 router.post('/score', function (req, res) {
     var data = getScoreData(req.body);
@@ -154,7 +154,8 @@ router.post('/score', function (req, res) {
 
 /**
  * Player Out
- * @param MatchID, InningsID, PlayerOut, NewFacingPlayer, NewOtherPlayer, OutReason, ReasonPlayerID, NewBowler(Not Mandatory)
+ * @param MatchID, InningsID(Not Mandatory), OverID(Not Mandatory), PlayerOut, NewFacingPlayer,
+ *        NewOtherPlayer, OutReason(Not Mandatory), ReasonPlayerID, NewBowler(Not Mandatory)
  * */
 router.post('/out', function (req, res) {
     var data = getOutData(req.body);

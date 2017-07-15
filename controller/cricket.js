@@ -26,9 +26,11 @@ Schema.MatchSchema.methods.findInnings = function (InningsID) {
 Schema.MatchSchema.methods.findOver = function (Inning, OverID) {
     if (Inning.Overs.id(OverID))
         return Inning.Overs.id(OverID);
+    
     var newOver = new Over();
     newOver._id = OverID;
     Inning.Overs.push(newOver);
+    
     return Inning.Overs.id(newOver._id);
 };
 
@@ -88,19 +90,22 @@ Schema.MatchSchema.methods.setInitialInningsData = function (InningsID, BattingT
 Schema.MatchSchema.methods.setOpeners = function (InningsID, FacingBatsMan, OtherBatsman, Bowler) {
     var game = this;
     InningsID = InningsID || game.Innings[ game.Innings.length - 1 ]._id;
+    
     return this.findInnings(InningsID)
         .then(function (Inning) {
             Inning.ActivePlayers.FacingBatsman = FacingBatsMan;
             Inning.ActivePlayers.OtherBatsman = OtherBatsman;
             Inning.ActivePlayers.Bowler = Bowler;
             
-            if (!Inning.Teams.Batting.Players.id(FacingBatsMan) || !Inning.Teams.Batting.Players.id(OtherBatsman) || !Inning.Teams.Bowling.Players.id(Bowler))
+            if (!Inning.Teams.Batting.Players.id(FacingBatsMan) || !Inning.Teams.Batting.Players.id(OtherBatsman)
+                || !Inning.Teams.Bowling.Players.id(Bowler))
                 return;
             
             if (Inning.Teams.Batting.Order.indexOf(FacingBatsMan) === -1)
                 Inning.Teams.Batting.Order.push(FacingBatsMan);
             if (Inning.Teams.Batting.Order.indexOf(OtherBatsman) === -1)
                 Inning.Teams.Batting.Order.push(OtherBatsman);
+            
             return game.save()
                 .then(function () {
                     return game;
@@ -148,14 +153,12 @@ Schema.MatchSchema.methods.nextInnings = function () {
 Schema.MatchSchema.methods.playerOut = function (InningsID, OverId, PlayerOut, NewFacingPlayer, NewOtherPlayer, OutReason, ReasonPlayerID, newBowler) {
     var game = this;
     InningsID = InningsID || game.Innings[ game.Innings.length - 1 ]._id;
+    
     return game.findInnings(InningsID)
         .then(function (Inning) {
             
             if (PlayerOut !== Inning.ActivePlayers.FacingBatsman && PlayerOut !== Inning.ActivePlayers.OtherBatsman)
                 return;
-            
-            Inning.ActivePlayers.FacingBatsman = NewFacingPlayer;
-            Inning.ActivePlayers.OtherBatsman = NewOtherPlayer;
             
             if ((newBowler && !Inning.Teams.Bowling.Players.id(newBowler)) || !Inning.Teams.Bowling.Players.id(ReasonPlayerID))
                 return;
@@ -165,6 +168,9 @@ Schema.MatchSchema.methods.playerOut = function (InningsID, OverId, PlayerOut, N
             
             if (!Inning.Teams.Batting.Players.id(NewFacingPlayer) || !Inning.Teams.Batting.Players.id(NewOtherPlayer))
                 return;
+            
+            Inning.ActivePlayers.FacingBatsman = NewFacingPlayer;
+            Inning.ActivePlayers.OtherBatsman = NewOtherPlayer;
             
             if (Inning.Teams.Batting.Order.indexOf(NewFacingPlayer) === -1)
                 Inning.Teams.Batting.Order.push(NewFacingPlayer);
@@ -216,6 +222,7 @@ Schema.MatchSchema.methods.Score = function (InningsID, ballCode, OverId, Score,
     var game = this;
     ballCode = parseInt(ballCode);
     InningsID = InningsID || game.Innings[ game.Innings.length - 1 ]._id;
+    
     return game.findInnings(InningsID)
         .then(function (Inning) {
             
@@ -236,7 +243,7 @@ Schema.MatchSchema.methods.Score = function (InningsID, ballCode, OverId, Score,
             ball.Details = ballCode;
             Over.Balls.push(ball);
             
-            if ([ Schema.BallCodes.Normal, Schema.BallCodes.Four, Schema.BallCodes.Six ].indexOf(parseInt(ballCode)) !== -1)
+            if ([ Schema.BallCodes.Normal, Schema.BallCodes.Four, Schema.BallCodes.Six ].indexOf(ballCode) !== -1)
                 Inning.TotalEffectiveBalls++;
             
             var Bowler = Inning.Teams.Bowling.Players.id(Inning.ActivePlayers.Bowler);
