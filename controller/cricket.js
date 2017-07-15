@@ -3,6 +3,8 @@
  */
 'use strict';
 
+var request = require('request-promise');
+
 var Schema = require('../model/cricket');
 
 /**Find an Inning by ID**/
@@ -64,24 +66,32 @@ Schema.MatchSchema.methods.setInitialInningsData = function (InningsID, BattingT
         .then(function (Inning) {
             Inning.Teams.Batting.ID = BattingTeam;
             Inning.Teams.Bowling.ID = BowlingTeam;
-            /*Todo: Fill with Team Data*/
-            var P1 = [ "123", "456", "789", "1245", "987", "654" ];
-            var P2 = [ "345", "476", "567", "6789", "786", "980" ];
-            var Player, Index;
-            for (Index in P1) {
-                Player = new Batsman();
-                Player._id = P1[ Index ];
-                Inning.Teams.Batting.Players.push(Player);
-            }
-            for (Index in P2) {
-                Player = new Bowler();
-                Player._id = P2[ Index ];
-                Inning.Teams.Bowling.Players.push(Player);
-            }
             
-            return game.save()
-                .then(function () {
-                    return game;
+            return request(getOptions(BattingTeam))
+                .then(function (data) {
+                    for (var Index = 0; Index < data.length; Index++) {
+                        var Player = new Batsman();
+                        Player._id = data[ Index ].UserId;
+                        Inning.Teams.Batting.Players.push(Player);
+                    }
+                    return request(getOptions(BowlingTeam))
+                        .then(function (data) {
+                            for (var Index = 0; Index < data.length; Index++) {
+                                Player = new Bowler();
+                                Player._id = data[ Index ].UserId;
+                                Inning.Teams.Bowling.Players.push(Player);
+                            }
+                            return game.save()
+                                .then(function () {
+                                    return game;
+                                });
+                        })
+                        .catch(function (e) {
+                            console.log(e);
+                        });
+                })
+                .catch(function (e) {
+                    console.log(e);
                 });
         });
 };
@@ -112,6 +122,15 @@ Schema.MatchSchema.methods.setOpeners = function (InningsID, FacingBatsMan, Othe
                 });
         });
 };
+
+function getOptions(teamID) {
+    return {
+        method : 'POST',
+        uri : 'http://test.sportsocial.in/team/getTeamPlayersId',
+        body : [ { teamid : teamID } ],
+        json : true
+    };
+}
 
 /**Move to Next Innings**/
 Schema.MatchSchema.methods.nextInnings = function () {
