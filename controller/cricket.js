@@ -24,18 +24,6 @@ Schema.MatchSchema.methods.findInnings = function (InningsID) {
         });
 };
 
-/**Find an Over by ID**/
-Schema.MatchSchema.methods.findOver = function (Inning, OverID) {
-    if (Inning.Overs.id(OverID))
-        return Inning.Overs.id(OverID);
-    
-    var newOver = new Over();
-    newOver._id = OverID;
-    Inning.Overs.push(newOver);
-    
-    return Inning.Overs.id(newOver._id);
-};
-
 /**End a match**/
 Schema.MatchSchema.methods.endMatch = function () {
     var game = this;
@@ -71,14 +59,14 @@ Schema.MatchSchema.methods.setInitialInningsData = function (InningsID, BattingT
                 .then(function (data) {
                     for (var Index = 0; Index < data.length; Index++) {
                         var Player = new Batsman();
-                        Player._id = data[ Index ].UserId;
+                        Player._id = data[ Index ][ 'UserId' ];
                         Inning.Teams.Batting.Players.push(Player);
                     }
                     return request(getOptions(BowlingTeam))
                         .then(function (data) {
                             for (var Index = 0; Index < data.length; Index++) {
                                 Player = new Bowler();
-                                Player._id = data[ Index ].UserId;
+                                Player._id = data[ Index ][ 'UserId' ];
                                 Inning.Teams.Bowling.Players.push(Player);
                             }
                             return game.save()
@@ -169,65 +157,96 @@ Schema.MatchSchema.methods.nextInnings = function () {
 };
 
 /**Player Gets Out**/
-Schema.MatchSchema.methods.playerOut = function (InningsID, OverId, PlayerOut, NewFacingPlayer, NewOtherPlayer, OutReason, ReasonPlayerID, newBowler) {
+Schema.MatchSchema.methods.playerOut = function (InningsID, BallCode, PlayerOut, NewFacing, NewOther, NewBowler, OutReasonCode, OutReasonID) {
     var game = this;
     InningsID = InningsID || game.Innings[ game.Innings.length - 1 ]._id;
+    BallCode = parseInt(BallCode);
+    OutReasonCode = parseInt(OutReasonCode);
     
     return game.findInnings(InningsID)
         .then(function (Inning) {
+            var oldPlayers = [ Inning.ActivePlayers.FacingBatsman, Inning.ActivePlayers.OtherBatsman ];
             
-            if (PlayerOut !== Inning.ActivePlayers.FacingBatsman && PlayerOut !== Inning.ActivePlayers.OtherBatsman)
+            if (oldPlayers.indexOf(PlayerOut) === -1 || (oldPlayers.indexOf(NewFacing) === -1 && oldPlayers.indexOf(NewOther) === -1)
+                || (NewFacing && !Inning.Teams.Batting.Players.id(NewFacing)) || (NewOther && !Inning.Teams.Batting.Players.id(NewOther)))
+                return;
+            if (NewBowler && !Inning.Teams.Bowling.Players.id(NewBowler))
+                return;
+            if (OutReasonID && !Inning.Teams.Bowling.Players.id(OutReasonID))
                 return;
             
-            if ((newBowler && !Inning.Teams.Bowling.Players.id(newBowler)) || !Inning.Teams.Bowling.Players.id(ReasonPlayerID))
+            if (Inning.Wickets.id(NewFacing) || Inning.Wickets.id(NewOther))
                 return;
             
-            if (newBowler)
-                Inning.ActivePlayers.Bowler = newBowler;
-            
-            if (!Inning.Teams.Batting.Players.id(NewFacingPlayer) || !Inning.Teams.Batting.Players.id(NewOtherPlayer))
+            if (!NewFacing && !NewOther)
                 return;
             
-            Inning.ActivePlayers.FacingBatsman = NewFacingPlayer;
-            Inning.ActivePlayers.OtherBatsman = NewOtherPlayer;
-            
-            if (Inning.Teams.Batting.Order.indexOf(NewFacingPlayer) === -1)
-                Inning.Teams.Batting.Order.push(NewFacingPlayer);
-            else Inning.Teams.Batting.Order.push(NewOtherPlayer);
-            
-            var OutPlayer = Inning.Teams.Batting.Players.id(PlayerOut);
-            OutPlayer.BallsFaced++;
-            OutPlayer.EffectiveBalls++;
-            OutPlayer.BowlerIDWhenOut = Inning.ActivePlayers.Bowler;
-            OutPlayer.FallOfWicketReason = OutReason;
-            OutPlayer.FallOfWicketPlayerID = ReasonPlayerID;
-            
+            var Batsman = Inning.Teams.Batting.Players.id(Inning.ActivePlayers.FacingBatsman);
             var Bowler = Inning.Teams.Bowling.Players.id(Inning.ActivePlayers.Bowler);
             
-            OverId = OverId || Math.floor(Inning.TotalEffectiveBalls / 6) + 1;
-            var Over = game.findOver(Inning, OverId);
+            if (NewBowler) {
+                if (Inning.Teams.Bowling.Players.id(NewBowler))
+                    Bowler = Inning.Teams.Bowling.Players.id(NewBowler);
+                else return;
+            }
             
-            Inning.TotalEffectiveBalls++;
             Inning.TotalBalls++;
-            Inning.FallenWickets++;
+            Batsman.BallsFaced++;
+            
+            var ball = new Ball();
+            ball._id = Inning.TotalBalls;
+            ball.BowlerID = Inning.ActivePlayers.Bowler;
+            ball.Details = Schema.BallCodes.Out;
+            ball.BatsmanID = Inning.ActivePlayers.FacingBatsman;
+            ball.OutID = PlayerOut;
+            
+            if (BallCode === Schema.BallCodes.NoBall) {
+                Bowler.NoBall++;
+            }
+            
+            else if (BallCode === Schema.BallCodes.Wide) {
+                Bowler.Wides++;
+            }
+            else {
+                Bowler.BallsDelivered++;
+                Batsman.EffectiveBalls++;
+                Inning.TotalEffectiveBalls++;
+                ball.BallNo = (Inning.TotalEffectiveBalls % 6);
+                if (ball.BallNo === 0) ball.BallNo = 6;
+            }
+            
+            if (Inning.TotalEffectiveBalls % 6 !== 0)
+                ball.Over = Math.floor(Inning.TotalEffectiveBalls / 6);
+            else ball.Over = Math.floor(Inning.TotalEffectiveBalls / 6) - 1;
+            
+            Inning.Balls.push(ball);
+            Inning.ActivePlayers.FacingBatsman = NewFacing;
+            Inning.ActivePlayers.OtherBatsman = NewOther;
+            
+            if (NewBowler)
+                Inning.ActivePlayers.Bowler = NewBowler;
             
             var wicket = new Wicket();
-            wicket._id = Bowler.Wickets.length + 1;
+            wicket._id = PlayerOut;
             var BallID = (Inning.TotalEffectiveBalls % 6);
             if (BallID === 0) BallID = 6;
-            wicket.OverID = Over._id + "." + BallID;
-            wicket.BatsmanID = OutPlayer;
+            wicket.OverID = Math.floor(Inning.TotalEffectiveBalls / 6) + "." + BallID;
+            wicket.BatsmanID = PlayerOut;
+            wicket.BowlerID = Bowler;
+            wicket.BallNo = Inning.TotalBalls;
             
-            Bowler.Wickets.push(wicket);
-            Bowler.BallsDelivered++;
+            Bowler.Wickets.push(wicket._id);
             
-            var newBall = new Ball();
-            newBall._id = Over.Balls.length + 1;
-            newBall.BatsmanID = Inning.ActivePlayers.FacingBatsman;
-            newBall.BowlerID = Bowler;
-            newBall.Details = Schema.BallCodes.Out;
-            newBall.OutID = OutPlayer;
-            Over.Balls.push(newBall);
+            Inning.Wickets.push(wicket);
+            
+            if (Inning.Teams.Batting.Order.indexOf(NewFacing) === -1)
+                Inning.Teams.Batting.Order.push(NewFacing);
+            else Inning.Teams.Batting.Order.push(NewOther);
+            
+            PlayerOut = Inning.Teams.Batting.Players.id(PlayerOut);
+            PlayerOut.BowlerIDWhenOut = Bowler._id;
+            PlayerOut.FallOfWicketReason = OutReasonCode;
+            PlayerOut.FallOfWicketPlayerID = OutReasonID;
             
             return game.save()
                 .then(function () {
@@ -237,64 +256,111 @@ Schema.MatchSchema.methods.playerOut = function (InningsID, OverId, PlayerOut, N
 };
 
 /**Normal Score**/
-Schema.MatchSchema.methods.Score = function (InningsID, ballCode, OverId, Score, switchSides, newBowler) {
+Schema.MatchSchema.methods.Score = function (InningsID, ballCode, Score, AdditionalCode, newBowler) {
     var game = this;
     ballCode = parseInt(ballCode);
+    AdditionalCode = parseInt(AdditionalCode);
+    Score = parseInt(Score);
     InningsID = InningsID || game.Innings[ game.Innings.length - 1 ]._id;
     
     return game.findInnings(InningsID)
         .then(function (Inning) {
-            
-            if (ballCode === Schema.BallCodes.Wide)
-                Score++;
-            
-            Inning.TotalScore += parseInt(Score);
             Inning.TotalBalls++;
             
-            OverId = OverId || Math.floor(Inning.TotalEffectiveBalls / 6) + 1;
-            var Over = game.findOver(Inning, OverId);
-            
-            var ball = new Ball();
-            ball._id = Over.Balls.length + 1;
-            ball.BatsmanID = Inning.ActivePlayers.FacingBatsman;
-            ball.BowlerID = Inning.ActivePlayers.Bowler;
-            ball.Score = Score;
-            ball.Details = ballCode;
-            Over.Balls.push(ball);
-            
-            if ([ Schema.BallCodes.Normal, Schema.BallCodes.Four, Schema.BallCodes.Six ].indexOf(ballCode) !== -1)
-                Inning.TotalEffectiveBalls++;
-            
-            var Bowler = Inning.Teams.Bowling.Players.id(Inning.ActivePlayers.Bowler);
             var Batsman = Inning.Teams.Batting.Players.id(Inning.ActivePlayers.FacingBatsman);
-            
-            Batsman.Score += parseInt(Score);
-            Batsman.BallsFaced++;
-            
-            if (ballCode === Schema.BallCodes.NoBall)
-                Bowler.NoBalls++;
-            else if (ballCode === Schema.BallCodes.Wide)
-                Bowler.Wides++;
-            else {
-                Bowler.BallsDelivered++;
-                Batsman.EffectiveBalls++;
-                if (ballCode === Schema.BallCodes.Four)
-                    Batsman.Fours++;
-                else if (ballCode === Schema.BallCodes.Six)
-                    Batsman.Six++;
-            }
+            var Bowler = Inning.Teams.Bowling.Players.id(Inning.ActivePlayers.Bowler);
             
             if (newBowler) {
-                if (!Inning.Teams.Bowling.Players.id(newBowler))
-                    return;
-                Inning.ActivePlayers.Bowler = newBowler;
+                if (Inning.Teams.Bowling.Players.id(newBowler))
+                    Bowler = Inning.Teams.Bowling.Players.id(newBowler);
+                else return;
             }
             
-            if (switchSides && parseInt(switchSides)) {
-                var temp = Inning.ActivePlayers.FacingBatsman;
-                Inning.ActivePlayers.FacingBatsman = Inning.ActivePlayers.OtherBatsman;
-                Inning.ActivePlayers.OtherBatsman = temp;
+            Batsman.BallsFaced++;
+            
+            var ball = new Ball();
+            ball._id = Inning.TotalBalls;
+            ball.BowlerID = Inning.ActivePlayers.Bowler;
+            ball.Details = ballCode;
+            ball.BatsmanID = Inning.ActivePlayers.FacingBatsman;
+            
+            
+            if (ballCode === Schema.BallCodes.DeadBall) {
+                Bowler.DeadBall++;
             }
+            
+            else if (ballCode === Schema.BallCodes.NoBall) {
+                Inning.TotalScore += 1 + Score;
+                Bowler.Score += 1 + Score;
+                Bowler.NoBall++;
+                Inning.Extras++;
+                
+                if (AdditionalCode === Schema.AdditionalCode.Bat) {
+                    Batsman.Score += Score;
+                    Batsman.TotalEffectiveBalls++;
+                }
+                else if (AdditionalCode === Schema.AdditionalCode.LegBye || AdditionalCode === Schema.AdditionalCode.Bye) {
+                    Inning.Extras += Score;
+                    Batsman.TotalEffectiveBalls++;
+                }
+                
+                ball.Score = 1 + Score;
+            }
+            
+            else if (ballCode === Schema.BallCodes.Wide) {
+                Inning.TotalScore += 1 + Score;
+                Inning.Extras += 1 + Score;
+                Bowler.Score += 1 + Score;
+                Bowler.Wide++;
+                
+                ball.Score = 1 + Score;
+            }
+            
+            else if (ballCode !== Schema.BallCodes.Out) {
+                Inning.TotalScore += Score;
+                Bowler.BallsDelivered++;
+                Inning.TotalEffectiveBalls++;
+                Batsman.EffectiveBalls++;
+                
+                ball.Score = Score;
+                
+                ball.BallNo = (Inning.TotalEffectiveBalls % 6);
+                if (ball.BallNo === 0) ball.BallNo = 6;
+                
+                Bowler.Score += Score;
+                
+                if ([ Schema.AdditionalCode.Bye, Schema.AdditionalCode.LegBye ].indexOf(AdditionalCode) === -1) {
+                    Batsman.Score += Score;
+                    if (ballCode === Schema.BallCodes.Six)
+                        Batsman.Sixes++;
+                    else if (ballCode === Schema.BallCodes.Four)
+                        Batsman.Fours++;
+                }
+                else {
+                    Inning.Extras += Score;
+                }
+                
+                if (Inning.TotalEffectiveBalls % 6 === 0) {
+                    var Temp = Inning.ActivePlayers.FacingBatsman;
+                    Inning.ActivePlayers.FacingBatsman = Inning.ActivePlayers.OtherBatsman;
+                    Inning.ActivePlayers.OtherBatsman = Temp;
+                }
+            }
+            
+            else return;
+            
+            if (Score % 2 === 1) {
+                var Temp = Inning.ActivePlayers.FacingBatsman;
+                Inning.ActivePlayers.FacingBatsman = Inning.ActivePlayers.OtherBatsman;
+                Inning.ActivePlayers.OtherBatsman = Temp;
+            }
+            
+            if (Inning.TotalEffectiveBalls % 6 !== 0)
+                ball.Over = Math.floor(Inning.TotalEffectiveBalls / 6);
+            else ball.Over = Math.floor(Inning.TotalEffectiveBalls / 6) - 1;
+            
+            Inning.Balls.push(ball);
+            
             return game.save()
                 .then(function () {
                     return Inning;
@@ -303,11 +369,10 @@ Schema.MatchSchema.methods.Score = function (InningsID, ballCode, OverId, Score,
 };
 
 var Inning = mDb.model('Inning', Schema.InningsSchema);
-var Match = mDb.model('Match', Schema.MatchSchema);
+var Match = mDb.model('Cricket', Schema.MatchSchema, 'Cricket');
 var Bowler = mDb.model('Bowler', Schema.BowlerSchema);
 var Batsman = mDb.model('Batsman', Schema.BatsmanSchema);
 var Wicket = mDb.model('Wicket', Schema.WicketSchema);
-var Over = mDb.model('Over', Schema.OverSchema);
 var Ball = mDb.model('Ball', Schema.BallSchema);
 
 /**Get Match By ID**/

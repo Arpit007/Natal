@@ -52,11 +52,11 @@ router.post('/end', function (req, res) {
                         Head : { Code : 200, Message : "Success" },
                         Body : { Result : game.Result }
                     });
-                })
-                .catch(function (e) {
-                    console.log(e);
-                    res.json({ Head : { Code : 400, Message : "Failed" } });
                 });
+        })
+        .catch(function (e) {
+            console.log(e);
+            res.json({ Head : { Code : 400, Message : "Failed" } });
         });
 });
 
@@ -81,14 +81,16 @@ router.post('/nextInning', function (req, res) {
                         Head : { Code : 200, Message : "Success" },
                         Body : {
                             InningsID : Inning._id,
-                            OverID : 1
+                            OverID : 1,
+                            Batting : Inning.Teams.Batting.ID,
+                            Bowling : Inning.Teams.Bowling.ID
                         }
                     });
-                })
-                .catch(function (e) {
-                    console.log(e);
-                    res.json({ Head : { Code : 400, Message : "Failed" } });
                 });
+        })
+        .catch(function (e) {
+            console.log(e);
+            res.json({ Head : { Code : 400, Message : "Failed" } });
         });
 });
 
@@ -113,17 +115,17 @@ router.post('/setOpeners', function (req, res) {
                     if (game)
                         res.json({ Head : { Code : 200, Message : "Success" } });
                     else res.json({ Head : { Code : 400, Message : "Failed" } });
-                })
-                .catch(function (e) {
-                    console.log(e);
-                    res.json({ Head : { Code : 400, Message : "Failed" } });
                 });
+        })
+        .catch(function (e) {
+            console.log(e);
+            res.json({ Head : { Code : 400, Message : "Failed" } });
         });
 });
 
 /**
  * Score
- * @param  MatchID, InningsID(Not Mandatory), BallCode, OverID(Not Mandatory), SwitchSides, NewBowler(Not Mandatory)
+ * @param  MatchID, InningsID(Not Mandatory), BallCode, Score, AdditionalCode(Not Mandatory), NewBowler(Not Mandatory)
  * */
 router.post('/score', function (req, res) {
     var data = getScoreData(req.body);
@@ -133,28 +135,23 @@ router.post('/score', function (req, res) {
     }
     cricket.getMatch(data.MatchID)
         .then(function (game) {
-            return game.Score(data.InningsID, data.BallCode, data.OverID, data.Score, data.SwitchSides, data.NewBowler)
+            return game.Score(data.InningsID, data.BallCode, data.Score, data.AdditionalCode, data.NewBowler)
                 .then(function (Inning) {
                     res.json({
                         Head : { Code : 200, Message : "Success" },
-                        Body : {
-                            InningsID : data.InningsID,
-                            OverID : Math.floor(Inning.TotalEffectiveBalls / 6) + 1,
-                            Balls : Inning.TotalEffectiveBalls % 6,
-                            Score : Inning.TotalScore
-                        }
+                        Body : getData(Inning)
                     });
-                })
-                .catch(function (e) {
-                    console.log(e);
-                    res.json({ Head : { Code : 400, Message : "Failed" } });
                 });
+        })
+        .catch(function (e) {
+            console.log(e);
+            res.json({ Head : { Code : 400, Message : "Failed" } });
         });
 });
 
 /**
  * Player Out
- * @param MatchID, InningsID(Not Mandatory), OverID(Not Mandatory), PlayerOut, NewFacingPlayer,
+ * @param MatchID, InningsID(Not Mandatory), PlayerOut, NewFacingPlayer,
  *        NewOtherPlayer, OutReason(Not Mandatory), ReasonPlayerID, NewBowler(Not Mandatory)
  * */
 router.post('/out', function (req, res) {
@@ -165,26 +162,21 @@ router.post('/out', function (req, res) {
     }
     cricket.getMatch(data.MatchID)
         .then(function (game) {
-            return game.playerOut(data.InningsID, data.OverID, data.PlayerOut, data.NewFacingPlayer,
-                data.NewOtherPlayer, data.OutReason, data.ReasonPlayerID, data.NewBowler)
+            return game.playerOut(data.InningsID, data.BallCode, data.PlayerOut, data.NewFacingPlayer,
+                data.NewOtherPlayer, data.NewBowler, data.OutReason, data.ReasonPlayerID)
                 .then(function (Inning) {
                     if (Inning) {
                         res.json({
                             Head : { Code : 200, Message : "Success" },
-                            Body : {
-                                InningsID : data.InningsID,
-                                OverID : Math.floor(Inning.TotalEffectiveBalls / 6) + 1,
-                                Balls : Inning.TotalEffectiveBalls % 6,
-                                Score : Inning.TotalScore
-                            }
+                            Body : getData(Inning)
                         });
                     }
                     else res.json({ Head : { Code : 400, Message : "Failed" } });
-                })
-                .catch(function (e) {
-                    console.log(e);
-                    res.json({ Head : { Code : 400, Message : "Failed" } });
                 });
+        })
+        .catch(function (e) {
+            console.log(e);
+            res.json({ Head : { Code : 400, Message : "Failed" } });
         });
 });
 
@@ -232,12 +224,11 @@ function getScoreData(data) {
     if (data.BallCode)
         Data.BallCode = data.BallCode;
     else return false;
-    Data.OverId = data.OverId;
+    Data.AdditionalCode = data.AdditionalCode;
     if (data.Score)
         Data.Score = data.Score;
     else return false;
     Data.NewBowler = data.NewBowler;
-    Data.SwitchSides = data.SwitchSides || false;
     return Data;
 }
 
@@ -247,16 +238,14 @@ function getOutData(data) {
         Data.MatchID = data.MatchID;
     else return false;
     Data.InningsID = data.InningsID;
-    Data.OverId = data.OverId;
     if (data.PlayerOut)
         Data.PlayerOut = data.PlayerOut;
     else return false;
-    if (data.NewFacingPlayer)
-        Data.NewFacingPlayer = data.NewFacingPlayer;
+    if (data.BallCode)
+        Data.BallCode = data.BallCode;
     else return false;
-    if (data.NewOtherPlayer)
-        Data.NewOtherPlayer = data.NewOtherPlayer;
-    else return false;
+    Data.NewFacingPlayer = data.NewFacingPlayer;
+    Data.NewOtherPlayer = data.NewOtherPlayer;
     Data.OutReason = data.OutReason;
     if (data.ReasonPlayerID)
         Data.ReasonPlayerID = data.ReasonPlayerID;
@@ -264,5 +253,36 @@ function getOutData(data) {
     Data.NewBowler = data.NewBowler;
     return Data;
 }
+
+var getData = function (Inning) {
+    var data = {
+        InningsID : Inning._id,
+        OverID : Math.floor(Inning.TotalEffectiveBalls / 6),
+        Balls : Inning.TotalEffectiveBalls % 6,
+        Score : Inning.TotalScore,
+        Wickets : Inning.Wickets.length,
+        Bowler : {
+            ID : Inning.ActivePlayers.Bowler,
+            Balls : Inning.Teams.Bowling.Players.id(Inning.ActivePlayers.Bowler).BallsDelivered,
+            Score : Inning.Teams.Bowling.Players.id(Inning.ActivePlayers.Bowler).Score,
+            Wickets : Inning.Teams.Bowling.Players.id(Inning.ActivePlayers.Bowler).Wickets.length
+        }
+    };
+    
+    if (Inning.Teams.Batting.Players.id(Inning.ActivePlayers.FacingBatsman))
+        data.Facing = {
+            ID : Inning.ActivePlayers.FacingBatsman,
+            Score : Inning.Teams.Batting.Players.id(Inning.ActivePlayers.FacingBatsman).Score,
+            Balls : Inning.Teams.Batting.Players.id(Inning.ActivePlayers.FacingBatsman).EffectiveBalls
+        };
+    
+    if (Inning.Teams.Batting.Players.id(Inning.ActivePlayers.OtherBatsman))
+        data.Other = {
+            ID : Inning.ActivePlayers.OtherBatsman,
+            Score : Inning.Teams.Batting.Players.id(Inning.ActivePlayers.OtherBatsman).Score,
+            Balls : Inning.Teams.Batting.Players.id(Inning.ActivePlayers.OtherBatsman).EffectiveBalls
+        };
+    return data;
+};
 
 module.exports = router;

@@ -12,12 +12,29 @@ var BallCodes = {
     NoBall : 3,
     Four : 4,
     Out : 5,
-    Six : 6
+    Six : 6,
+    DeadBall : 7
+};
+
+var AdditionalCode = {
+    LegBye : 1,
+    Bye : 2,
+    Bat : 3
+};
+
+var OutReason = {
+    Bowled : 1,
+    RunOut : 2,
+    CatchOut : 3,
+    LBW : 4,
+    Stumped : 5
 };
 
 var BallSchema = Schema({
     _id : { type : String, required : true },
-    BatsmanID : { type : String, required : true },
+    Over : { type : Number, required : true },
+    BallNo : { type : Number, default : 0 },
+    BatsmanID : { type : String },
     BowlerID : { type : String, required : true },
     Score : { type : Number, default : 0 },
     Details : { type : String },
@@ -39,7 +56,9 @@ var BatsmanSchema = Schema({
 var WicketSchema = Schema({
     _id : { type : String, required : true },
     OverID : { type : String, required : true },
-    BatsmanID : { type : String, required : true }
+    BatsmanID : { type : String, required : true },
+    BowlerID : { type : String, required : true },
+    BallNo : { type : Number, required : true }
 });
 
 var BowlerSchema = Schema({
@@ -47,19 +66,16 @@ var BowlerSchema = Schema({
     BallsDelivered : { type : Number, default : 0 },
     Wides : { type : Number, default : 0 },
     NoBalls : { type : Number, default : 0 },
-    Wickets : [ WicketSchema ]
-});
-
-var OverSchema = Schema({
-    _id : { type : String, required : true },
-    Balls : [ BallSchema ]
+    DeadBall : { type : Number, default : 0 },
+    Score : { type : Number, default : 0 },
+    Wickets : [ { type : String } ]
 });
 
 var InningsSchema = Schema({
     _id : { type : String, required : true, default : "1" },
     TotalScore : { type : Number, default : 0 },
+    Extras : { type : Number, default : 0 },
     TargetScore : { type : Number, default : 0 },
-    FallenWickets : { type : Number, default : 0 },
     TotalEffectiveBalls : { type : Number, default : 0 },
     TotalBalls : { type : Number, default : 0 },
     ActivePlayers : {
@@ -67,7 +83,7 @@ var InningsSchema = Schema({
         OtherBatsman : { type : String },
         Bowler : { type : String }
     },
-    Overs : [ OverSchema ],
+    Balls : [ BallSchema ],
     Teams : {
         Batting : {
             ID : { type : String },
@@ -78,7 +94,8 @@ var InningsSchema = Schema({
             ID : { type : String },
             Players : [ BowlerSchema ]
         }
-    }
+    },
+    Wickets : [ WicketSchema ]
 });
 
 var MatchSchema = Schema({
@@ -93,11 +110,12 @@ var MatchSchema = Schema({
 
 module.exports = {
     BallCodes : BallCodes,
+    AdditionalCode : AdditionalCode,
+    OutReason : OutReason,
     BallSchema : BallSchema,
     BatsmanSchema : BatsmanSchema,
     WicketSchema : WicketSchema,
     BowlerSchema : BowlerSchema,
-    OverSchema : OverSchema,
     InningsSchema : InningsSchema,
     MatchSchema : MatchSchema
 };
