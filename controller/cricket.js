@@ -231,7 +231,6 @@ Schema.MatchSchema.methods.playerOut = function (InningsID, BallCode, PlayerOut,
             var BallID = (Inning.TotalEffectiveBalls % 6);
             if (BallID === 0) BallID = 6;
             wicket.OverID = Math.floor(Inning.TotalEffectiveBalls / 6) + "." + BallID;
-            wicket.BatsmanID = PlayerOut;
             wicket.BowlerID = Bowler;
             wicket.BallNo = Inning.TotalBalls;
             
@@ -390,10 +389,11 @@ Match.getMatch = function (MatchID) {
 };
 
 /**Start New Match**/
-Match.startMatch = function (MatchID, BattingTeam, BowlingTeam, TossWinner) {
+Match.createMatch = function (MatchID, BattingTeam, BowlingTeam, TossWinner) {
     return Match.getMatch(MatchID)
         .then(function (game) {
-            game.StartTime = new Date();
+            if (TossWinner !== BattingTeam || TossWinner !== BowlingTeam)
+                return;
             game.Teams = [ BattingTeam, BowlingTeam ];
             game.TossWinner = TossWinner;
             game.Innings = [];

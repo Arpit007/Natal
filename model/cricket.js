@@ -56,7 +56,6 @@ var BatsmanSchema = Schema({
 var WicketSchema = Schema({
     _id : { type : String, required : true },
     OverID : { type : String, required : true },
-    BatsmanID : { type : String, required : true },
     BowlerID : { type : String, required : true },
     BallNo : { type : Number, required : true }
 });

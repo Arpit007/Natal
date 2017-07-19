@@ -6,24 +6,100 @@ var router = express.Router();
 
 var cricket = require('../controller/cricket');
 
-/**Start match
+router.get('/', function (req, res) {
+    res.end('Natal: Cricket');
+});
+
+/*Get Match Details*/
+router.post('/details', function (req, res) {
+    if (!req.body.MatchID) {
+        res.json({ Head : { Code : 400, Message : "Natal: Cricket" } });
+        return;
+    }
+    cricket.getMatch(req.body.MatchID)
+        .then(function (game) {
+            var Inning = game.Innings[ game.Innings.length - 1 ];
+            var Body = {
+                GameID : game._id,
+                Teams : game.Teams,
+                StartTime : game.StartTime,
+                EndTime : game.EndTime
+            };
+            
+            if (Inning) {
+                Body.InningsID = Inning._id;
+                Body.BattingTeam = Inning.Teams.Batting;
+                Body.BowlingTeam = Inning.Teams.Bowling;
+                Body.Score = Inning.TotalScore;
+                Body.Extras = Inning.Extras;
+                Body.TargetScore = Inning.TargetScore;
+                Body.Wickets = Inning.Wickets.length;
+                Body.OverID = Math.floor(Inning.TotalEffectiveBalls / 6);
+                Body.Balls = Inning.TotalEffectiveBalls % 6;
+                Body.FacingBatsman = Inning.ActivePlayers.FacingBatsman;
+                Body.OtherBatsman = Inning.ActivePlayers.OtherBatsman;
+                Body.Bowler = Inning.ActivePlayers.Bowler;
+            }
+            res.json({
+                Head : { Code : 200, Message : "Success" },
+                Body : Body
+            });
+        })
+        .catch(function (e) {
+            console.log(e);
+            res.json({ Head : { Code : 400, Message : "Failed" } });
+        });
+});
+
+/**Create match
  * @param MatchID, BattingTeam, BowlingTeam, TossWinner
  **/
-router.post('/start', function (req, res) {
+router.post('/create', function (req, res) {
     var data = getStartData(req.body);
     if (!data) {
         res.json({ Head : { Code : 400, Message : "Missing Fields" } });
         return;
     }
-    cricket.startMatch(data.MatchID, data.BattingTeam, data.BowlingTeam, data.TossWinner)
-        .then(function () {
-            res.json({
-                Head : { Code : 200, Message : "Success" },
-                Body : {
-                    InningsID : 1,
-                    OverID : 1
-                }
-            });
+    cricket.createMatch(data.MatchID, data.BattingTeam, data.BowlingTeam, data.TossWinner)
+        .then(function (game) {
+            if (game) {
+                res.json({
+                    Head : { Code : 200, Message : "Success" },
+                    Body : {
+                        InningsID : 1,
+                        OverID : 1
+                    }
+                });
+            }
+            else res.json({ Head : { Code : 400, Message : "Failed" } });
+        })
+        .catch(function (e) {
+            console.log(e);
+            res.json({ Head : { Code : 400, Message : "Failed" } });
+        });
+});
+
+/**Start match
+ * @param MatchID
+ **/
+router.post('/start', function (req, res) {
+    if (!req.body.MatchID) {
+        res.json({ Head : { Code : 400, Message : "Missing Fields" } });
+        return;
+    }
+    cricket.getMatch(req.body.MatchID)
+        .then(function (game) {
+            game.StartTime = new Date();
+            
+            return game.save()
+                .then(function () {
+                    res.json({
+                        Head : { Code : 200, Message : "Success" },
+                        Body : {
+                            StartTime : game.StartTime
+                        }
+                    });
+                });
         })
         .catch(function (e) {
             console.log(e);
@@ -106,10 +182,6 @@ router.post('/setOpeners', function (req, res) {
     }
     cricket.getMatch(data.MatchID)
         .then(function (game) {
-            if (!game.StartTime) {
-                res.json({ Head : { Code : 400, Message : "Start Match First" } });
-                return;
-            }
             return game.setOpeners(data.InningsID, data.FacingBatsman, data.OtherBatsman, data.Bowler)
                 .then(function (game) {
                     if (game)
@@ -225,7 +297,7 @@ function getScoreData(data) {
         Data.BallCode = data.BallCode;
     else return false;
     Data.AdditionalCode = data.AdditionalCode;
-    if (data.Score)
+    if (data.Score !== 'undefined')
         Data.Score = data.Score;
     else return false;
     Data.NewBowler = data.NewBowler;
@@ -261,27 +333,11 @@ var getData = function (Inning) {
         Balls : Inning.TotalEffectiveBalls % 6,
         Score : Inning.TotalScore,
         Wickets : Inning.Wickets.length,
-        Bowler : {
-            ID : Inning.ActivePlayers.Bowler,
-            Balls : Inning.Teams.Bowling.Players.id(Inning.ActivePlayers.Bowler).BallsDelivered,
-            Score : Inning.Teams.Bowling.Players.id(Inning.ActivePlayers.Bowler).Score,
-            Wickets : Inning.Teams.Bowling.Players.id(Inning.ActivePlayers.Bowler).Wickets.length
-        }
+        Bowler : Inning.Teams.Bowling.Players.id(Inning.ActivePlayers.Bowler),
+        Facing : Inning.Teams.Batting.Players.id(Inning.ActivePlayers.FacingBatsman),
+        Other : Inning.Teams.Batting.Players.id(Inning.ActivePlayers.OtherBatsman)
     };
     
-    if (Inning.Teams.Batting.Players.id(Inning.ActivePlayers.FacingBatsman))
-        data.Facing = {
-            ID : Inning.ActivePlayers.FacingBatsman,
-            Score : Inning.Teams.Batting.Players.id(Inning.ActivePlayers.FacingBatsman).Score,
-            Balls : Inning.Teams.Batting.Players.id(Inning.ActivePlayers.FacingBatsman).EffectiveBalls
-        };
-    
-    if (Inning.Teams.Batting.Players.id(Inning.ActivePlayers.OtherBatsman))
-        data.Other = {
-            ID : Inning.ActivePlayers.OtherBatsman,
-            Score : Inning.Teams.Batting.Players.id(Inning.ActivePlayers.OtherBatsman).Score,
-            Balls : Inning.Teams.Batting.Players.id(Inning.ActivePlayers.OtherBatsman).EffectiveBalls
-        };
     return data;
 };
 
